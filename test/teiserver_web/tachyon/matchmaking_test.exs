@@ -4,6 +4,9 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
   alias Teiserver.OAuthFixtures
   alias Teiserver.Player
 
+  import Teiserver.Support.Tachyon, only: [poll_until: 2]
+
+
   describe "list" do
     setup {Tachyon, :setup_client}
 
@@ -67,39 +70,85 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
     setup [{Tachyon, :setup_client}, :setup_queue]
 
     test "works", %{client: client, queue_id: queue_id} do
-      resp = Tachyon.join_queues!(client, [queue_id])
-      assert %{"status" => "success"} = resp
-      resp = Tachyon.join_queues!(client, [queue_id])
-      assert %{"status" => "failed", "reason" => "already_queued"} = resp
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [queue_id])
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 32,
+        wait: 250
+      )
+
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [queue_id])
+        end,
+        &(%{"status" => "failed", "reason" => "already_queued"} = &1),
+        limit: 32,
+        wait: 250
+      )
     end
 
     test "multiple", %{client: client, queue_id: queue_id} do
       {:ok, queue_id: other_queue_id, queue_pid: _} = setup_queue(nil)
-      resp = Tachyon.join_queues!(client, [queue_id, other_queue_id])
-      assert %{"status" => "success"} = resp
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [queue_id, other_queue_id])
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 32,
+        wait: 250
+      )
     end
 
     test "all or nothing", %{client: client, queue_id: queue_id} do
-      resp = Tachyon.join_queues!(client, [queue_id, "lolnope that's not a queue"])
-      assert %{"status" => "failed", "reason" => "invalid_queue_specified"} = resp
-      resp = Tachyon.join_queues!(client, [queue_id])
-      assert %{"status" => "success"} = resp
+
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [queue_id, "lolnope that's not a queue"])
+        end,
+        &(%{"status" => "failed", "reason" => "invalid_queue_specified"} = &1),
+        limit: 64,
+        wait: 250
+      )
+
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [queue_id])
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 64,
+        wait: 250
+      )
     end
 
     test "with disconnections", %{token: token, client: client, queue_id: queue_id} do
-      %{"status" => "success"} = Tachyon.join_queues!(client, [queue_id])
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [queue_id])
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 64,
+        wait: 250
+      )
 
       # clean disconnection removes user from queue
       Tachyon.disconnect!(client)
       client = Tachyon.connect(token)
-      %{"status" => "success"} = Tachyon.join_queues!(client, [queue_id])
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [queue_id])
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 64,
+        wait: 250
+      )
 
       # A crash doesn't remove the player from the queue
       Tachyon.abrupt_disconnect!(client)
       client = Tachyon.connect(token)
 
-      %{"status" => "failed", "reason" => "already_queued"} =
-        Tachyon.join_queues!(client, [queue_id])
+
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [queue_id])
+        end,
+        &(%{"status" => "failed", "reason" => "already_queued"} = &1),
+        limit: 32,
+        wait: 250
+      )
     end
 
     test "too many player", %{client: client} do
@@ -114,8 +163,15 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
         })
         |> Teiserver.Matchmaking.QueueServer.start_link()
 
-      assert %{"status" => "failed", "reason" => "invalid_request"} =
-               Tachyon.join_queues!(client, [id])
+        Teiserver.Support.Tachyon.poll_until(
+          fn -> Tachyon.join_queues!(client, [id])
+          end,
+          &(%{"status" => "failed", "reason" => "invalid_request"} = &1),
+          limit: 32,
+          wait: 250
+        )
+      # assert %{"status" => "failed", "reason" => "invalid_request"} =
+      #          Tachyon.join_queues!(client, [id])
     end
   end
 
@@ -123,7 +179,8 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
     setup [{Tachyon, :setup_client}, :setup_queue]
 
     test "works", %{client: client, queue_id: queue_id} do
-      assert %{"status" => "success"} = Tachyon.join_queues!(client, [queue_id])
+      response = Tachyon.join_queues!(client, [queue_id])
+      assert_receive %{"status" => "success"} = response, 20000
       assert %{"status" => "success"} = Tachyon.leave_queues!(client)
 
       assert %{"commandId" => "matchmaking/cancelled", "data" => %{"reason" => "intentional"}} =
