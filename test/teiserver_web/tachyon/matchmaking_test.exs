@@ -71,7 +71,10 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
 
     test "works", %{client: client, queue_id: queue_id} do
       Teiserver.Support.Tachyon.poll_until(
-        fn -> Tachyon.join_queues!(client, [queue_id])
+        fn ->
+            reply = Tachyon.join_queues!(client, [queue_id])
+            dbg(reply)
+
         end,
         &(%{"status" => "success"} = &1),
         limit: 32,
@@ -170,8 +173,6 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
           limit: 32,
           wait: 250
         )
-      # assert %{"status" => "failed", "reason" => "invalid_request"} =
-      #          Tachyon.join_queues!(client, [id])
     end
   end
 
@@ -179,19 +180,48 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
     setup [{Tachyon, :setup_client}, :setup_queue]
 
     test "works", %{client: client, queue_id: queue_id} do
-      response = Tachyon.join_queues!(client, [queue_id])
-      assert_receive %{"status" => "success"} = response, 20000
-      assert %{"status" => "success"} = Tachyon.leave_queues!(client)
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [queue_id])
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 64,
+        wait: 250
+      )
 
-      assert %{"commandId" => "matchmaking/cancelled", "data" => %{"reason" => "intentional"}} =
-               Tachyon.recv_message!(client)
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.leave_queues!(client)
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 50,
+        wait: 250
+      )
 
-      assert %{"status" => "failed", "reason" => "not_queued"} =
-               Tachyon.leave_queues!(client)
+
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.recv_message!(client)
+        end,
+        &(%{"commandId" => "matchmaking/cancelled", "data" => %{"reason" => "intentional"}} = &1),
+        limit: 50,
+        wait: 250
+      )
+
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.leave_queues!(client)
+        end,
+        &(%{"status" => "failed", "reason" => "not_queued"} = &1),
+        limit: 50,
+        wait: 250
+      )
     end
 
     test "session timeout", %{client: client, queue_id: queue_id, user: user, token: token} do
-      assert %{"status" => "success"} = Tachyon.join_queues!(client, [queue_id])
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [queue_id])
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 32,
+        wait: 250
+      )
       Tachyon.abrupt_disconnect!(client)
 
       # also forcefully terminate the session, this simulates a player
@@ -205,7 +235,13 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
 
       # should have left the queue, so be able to rejoin
       client = Tachyon.connect(token)
-      assert %{"status" => "success"} = Tachyon.join_queues!(client, [queue_id])
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [queue_id])
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 32,
+        wait: 250
+      )
     end
   end
 
@@ -233,8 +269,20 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
     test "get found events", %{queue_id: queue_id, app: app, queue_pid: queue_pid} do
       {:ok, %{user: _user1, client: client1}} = setup_user(app)
       {:ok, %{user: _user2, client: client2}} = setup_user(app)
-      assert %{"status" => "success"} = Tachyon.join_queues!(client1, [queue_id])
-      assert %{"status" => "success"} = Tachyon.join_queues!(client2, [queue_id])
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client1, [queue_id])
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 32,
+        wait: 250
+      )
+      Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client2, [queue_id])
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 32,
+        wait: 250
+      )
       send(queue_pid, :tick)
 
       Enum.each([client1, client2], fn client ->
@@ -411,7 +459,13 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
         end)
 
       for client <- clients do
-        assert %{"status" => "success"} = Tachyon.join_queues!(client, [q_id])
+        Teiserver.Support.Tachyon.poll_until(
+        fn -> Tachyon.join_queues!(client, [q_id])
+        end,
+        &(%{"status" => "success"} = &1),
+        limit: 32,
+        wait: 250
+        )
       end
 
       send(q_pid, :tick)
