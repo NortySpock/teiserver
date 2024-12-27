@@ -1,4 +1,5 @@
 defmodule Teiserver.Matchmaking.MatchmakingTest do
+  #use ExUnit.Case, async: true
   use TeiserverWeb.ConnCase
   alias Teiserver.Support.Tachyon
   alias Teiserver.OAuthFixtures
@@ -8,6 +9,7 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
     setup {Tachyon, :setup_client}
 
     test "works", %{client: client} do
+      step1 = Task.async(fn ->
       resp = Tachyon.list_queues!(client)
 
       # convert into a set since the order must not impact test result
@@ -30,6 +32,8 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
         ])
 
       assert MapSet.new(resp["data"]["playlists"]) == expected_playlists
+      end)
+      Task.await(step1)
     end
   end
 
@@ -67,16 +71,23 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
     setup [{Tachyon, :setup_client}, :setup_queue]
 
     test "works", %{client: client, queue_id: queue_id} do
+      Task.await(Task.async(fn ->
       resp = Tachyon.join_queues!(client, [queue_id])
       assert %{"status" => "success"} = resp
+      end))
+
+      Task.await(Task.async(fn ->
       resp = Tachyon.join_queues!(client, [queue_id])
       assert %{"status" => "failed", "reason" => "already_queued"} = resp
+      end))
     end
 
     test "multiple", %{client: client, queue_id: queue_id} do
-      {:ok, queue_id: other_queue_id, queue_pid: _} = setup_queue(nil)
-      resp = Tachyon.join_queues!(client, [queue_id, other_queue_id])
-      assert %{"status" => "success"} = resp
+      Task.await(Task.async(fn ->
+        {:ok, queue_id: other_queue_id, queue_pid: _} = setup_queue(nil)
+        resp = Tachyon.join_queues!(client, [queue_id, other_queue_id])
+        assert %{"status" => "success"} = resp
+      end))
     end
 
     test "all or nothing", %{client: client, queue_id: queue_id} do
@@ -244,7 +255,11 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
       app: app,
       queue_pid: queue_pid
     } do
+      step1 = Task.async(fn ->
       [client1, client2] = join_and_pair(app, queue_id, queue_pid, 2)
+      end)
+      [client1, client2] = Task.await(step1)
+
       assert %{"status" => "success"} = Tachyon.leave_queues!(client1)
 
       assert %{"commandId" => "matchmaking/lost"} = Tachyon.recv_message!(client2)
