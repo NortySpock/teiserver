@@ -73,20 +73,22 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
       Teiserver.Support.Tachyon.poll_until(
         fn ->
             reply = Tachyon.join_queues!(client, [queue_id])
-            dbg(reply)
-
+            #dbg(reply)
+            #reply
         end,
         &(%{"status" => "success"} = &1),
-        limit: 32,
-        wait: 250
+        limit: 250,
+        wait: 1
       )
 
       Teiserver.Support.Tachyon.poll_until(
-        fn -> Tachyon.join_queues!(client, [queue_id])
+        fn -> reply =  Tachyon.join_queues!(client, [queue_id])
+            #dbg(reply)
+            #reply
         end,
         &(%{"status" => "failed", "reason" => "already_queued"} = &1),
-        limit: 32,
-        wait: 250
+        limit: 250,
+        wait: 1
       )
     end
 
@@ -96,8 +98,8 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
         fn -> Tachyon.join_queues!(client, [queue_id, other_queue_id])
         end,
         &(%{"status" => "success"} = &1),
-        limit: 32,
-        wait: 250
+        limit: 250,
+        wait: 1
       )
     end
 
@@ -107,16 +109,16 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
         fn -> Tachyon.join_queues!(client, [queue_id, "lolnope that's not a queue"])
         end,
         &(%{"status" => "failed", "reason" => "invalid_queue_specified"} = &1),
-        limit: 64,
-        wait: 250
+        limit: 250,
+        wait: 1
       )
 
       Teiserver.Support.Tachyon.poll_until(
         fn -> Tachyon.join_queues!(client, [queue_id])
         end,
         &(%{"status" => "success"} = &1),
-        limit: 64,
-        wait: 250
+        limit: 250,
+        wait: 1
       )
     end
 
@@ -125,8 +127,8 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
         fn -> Tachyon.join_queues!(client, [queue_id])
         end,
         &(%{"status" => "success"} = &1),
-        limit: 64,
-        wait: 250
+        limit: 250,
+        wait: 1
       )
 
       # clean disconnection removes user from queue
@@ -136,8 +138,8 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
         fn -> Tachyon.join_queues!(client, [queue_id])
         end,
         &(%{"status" => "success"} = &1),
-        limit: 64,
-        wait: 250
+        limit: 250,
+        wait: 1
       )
 
       # A crash doesn't remove the player from the queue
@@ -273,8 +275,8 @@ defmodule Teiserver.Matchmaking.MatchmakingTest do
         fn -> Tachyon.join_queues!(client1, [queue_id])
         end,
         &(%{"status" => "success"} = &1),
-        limit: 32,
-        wait: 250
+        limit: 250,
+        wait: 1
       )
       Teiserver.Support.Tachyon.poll_until(
         fn -> Tachyon.join_queues!(client2, [queue_id])
