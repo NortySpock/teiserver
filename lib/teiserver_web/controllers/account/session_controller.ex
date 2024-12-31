@@ -113,6 +113,15 @@ defmodule TeiserverWeb.Account.SessionController do
   end
 
   defp login_reply({:ok, user}, conn, redirect_route) do
+
+    IO.puts "login_reply user redirect"
+
+
+    Account.update_user(user, %{  last_login_timex: Timex.today()
+})
+
+
+
     conn
     |> put_flash(:info, "Welcome back!")
     |> Guardian.Plug.sign_in(user)
@@ -123,6 +132,13 @@ defmodule TeiserverWeb.Account.SessionController do
   defp login_reply({:ok, user}, conn) do
     cookies = Plug.Conn.fetch_cookies(conn, signed: ~w(_redirect_to)).cookies
 
+
+    IO.puts "login_reply user cookies"
+
+    dbg(user)
+    Account.update_user(user, %{ last_login_timex: Timex.today()
+})
+
     conn
     |> put_flash(:info, "Welcome back!")
     |> Guardian.Plug.sign_in(user)
@@ -132,6 +148,8 @@ defmodule TeiserverWeb.Account.SessionController do
   end
 
   defp login_reply({:error, reason}, conn) do
+    IO.puts "login_reply user immediate signout"
+
     conn
     |> Guardian.Plug.sign_out(clear_remember_me: true)
     |> put_flash(:danger, to_string(reason))

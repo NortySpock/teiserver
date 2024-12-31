@@ -138,6 +138,7 @@ defmodule Teiserver.Account.UserLib do
   """
   def update_user(%User{} = user, attrs) do
     Account.recache_user(user.id)
+    dbg(attrs)
 
     user
     |> User.changeset(attrs, :limited_with_data)
