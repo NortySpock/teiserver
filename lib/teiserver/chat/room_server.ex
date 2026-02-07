@@ -109,14 +109,15 @@ defmodule Teiserver.Chat.RoomServer do
         |> Map.update!(:members, &MapSet.put(&1, userid))
         |> Map.update!(:monitors, &MC.monitor(&1, pid, userid))
 
+      update_cache(state)
+      update_member_count(state)
+
       PubSub.broadcast(
         Teiserver.PubSub,
         "room:#{state.name}",
         {:add_user_to_room, userid, state.name}
       )
 
-      update_cache(state)
-      update_member_count(state)
       {:reply, {:ok, :joined}, state}
     end
   end
@@ -128,14 +129,15 @@ defmodule Teiserver.Chat.RoomServer do
         |> Map.update!(:monitors, &MC.demonitor_by_val(&1, userid))
         |> Map.update!(:members, &MapSet.delete(&1, userid))
 
+      update_cache(state)
+      update_member_count(state)
+
       PubSub.broadcast(
         Teiserver.PubSub,
         "room:#{state.name}",
         {:remove_user_from_room, userid, state.name}
       )
 
-      update_cache(state)
-      update_member_count(state)
       {:reply, :ok, state}
     else
       {:reply, :ok, state}
@@ -236,14 +238,15 @@ defmodule Teiserver.Chat.RoomServer do
       userid ->
         state = Map.update!(state, :members, &MapSet.delete(&1, userid))
 
+        update_cache(state)
+        update_member_count(state)
+
         PubSub.broadcast(
           Teiserver.PubSub,
           "room:#{state.name}",
           {:remove_user_from_room, userid, state.name}
         )
 
-        update_cache(state)
-        update_member_count(state)
         {:noreply, state}
     end
   end
