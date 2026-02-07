@@ -118,11 +118,15 @@ defmodule Teiserver.Chat.ChatRoomTest do
       end)
 
     name = "room name"
+    PubSub.subscribe(Teiserver.PubSub, "room:#{name}")
     Room.get_or_make_room(name, 123)
     Room.add_user_to_room(123, name, sink_task.pid)
 
     send(sink_task.pid, nil)
     Task.await(sink_task)
+
+    assert_receive {:remove_user_from_room, 123, ^name}
+
     room = Room.get_room(name)
     assert not MapSet.member?(room.members, 123)
     assert Room.list_rooms() == [{name, 0}]
