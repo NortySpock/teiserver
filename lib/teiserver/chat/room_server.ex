@@ -23,9 +23,7 @@ defmodule Teiserver.Chat.RoomServer do
 
   @spec get_room(String.t()) :: room() | nil
   def get_room(name) do
-    GenServer.call(via_tuple(name), :get_room)
-  catch
-    :exit, {:noproc, _} -> nil
+    Teiserver.cache_get(:rooms, name)
   end
 
   @spec join_room(String.t(), T.userid(), pid() | nil) ::
@@ -91,6 +89,7 @@ defmodule Teiserver.Chat.RoomServer do
       monitors: MC.new()
     }
 
+    update_cache(state)
     update_member_count(state)
 
     {:ok, state}
@@ -110,6 +109,13 @@ defmodule Teiserver.Chat.RoomServer do
         |> Map.update!(:members, &MapSet.put(&1, userid))
         |> Map.update!(:monitors, &MC.monitor(&1, pid, userid))
 
+      PubSub.broadcast(
+        Teiserver.PubSub,
+        "room:#{state.name}",
+        {:add_user_to_room, userid, state.name}
+      )
+
+      update_cache(state)
       update_member_count(state)
       {:reply, {:ok, :joined}, state}
     end
@@ -128,6 +134,7 @@ defmodule Teiserver.Chat.RoomServer do
         {:remove_user_from_room, userid, state.name}
       )
 
+      update_cache(state)
       update_member_count(state)
       {:reply, :ok, state}
     else
@@ -147,6 +154,7 @@ defmodule Teiserver.Chat.RoomServer do
   end
 
   def handle_call(:stop, _from, state) do
+    Teiserver.cache_delete(:rooms, state.name)
     {:stop, :shutdown, :ok, state}
   end
 
@@ -227,9 +235,23 @@ defmodule Teiserver.Chat.RoomServer do
 
       userid ->
         state = Map.update!(state, :members, &MapSet.delete(&1, userid))
+
+        PubSub.broadcast(
+          Teiserver.PubSub,
+          "room:#{state.name}",
+          {:remove_user_from_room, userid, state.name}
+        )
+
+        update_cache(state)
         update_member_count(state)
         {:noreply, state}
     end
+  end
+
+  defp update_cache(state) do
+    # We strip monitors before caching as they are process-local
+    cache_state = Map.delete(state, :monitors)
+    Teiserver.cache_put(:rooms, state.name, cache_state)
   end
 
   defp update_member_count(state) do

@@ -25,6 +25,7 @@
 #### Keep but will need work to cache based on state of cluster
 - ConCache.put(:lists, :clients, [])
 - ConCache.insert_new(:lists, :lobbies, [])}
+- ConCache.put(:lists, :rooms, []) (Managed by RoomServer as single-writer)
 
 #### Keep - No race-conditions and no duplication (uses db/store not cache)
 - Site config types

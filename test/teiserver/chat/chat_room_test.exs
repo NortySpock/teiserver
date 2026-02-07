@@ -7,6 +7,8 @@ defmodule Teiserver.Chat.ChatRoomTest do
 
   setup do
     :ok = Supervisor.terminate_child(Teiserver.Supervisor, Teiserver.Chat.RoomSystem)
+    :ok = Supervisor.terminate_child(Teiserver.Supervisor, {ConCache, :rooms})
+    {:ok, _pid} = Supervisor.restart_child(Teiserver.Supervisor, {ConCache, :rooms})
     {:ok, _pid} = Supervisor.restart_child(Teiserver.Supervisor, Teiserver.Chat.RoomSystem)
     user = Central.Helpers.GeneralTestLib.make_user(%{"data" => %{"roles" => ["Verified"]}})
 
