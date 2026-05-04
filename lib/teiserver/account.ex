@@ -22,6 +22,7 @@ defmodule Teiserver.Account do
   alias Teiserver.Account.RatingLib
   alias Teiserver.Account.Relationship
   alias Teiserver.Account.RelationshipLib
+  alias Teiserver.Account.RelationshipNote
   alias Teiserver.Account.RelationshipQueries
   alias Teiserver.Account.SmurfKey
   alias Teiserver.Account.SmurfKeyLib
@@ -1587,6 +1588,67 @@ defmodule Teiserver.Account do
   """
   def change_relationship(%Relationship{} = relationship, attrs \\ %{}) do
     Relationship.changeset(relationship, attrs)
+  end
+
+  @doc """
+  Gets a single relationship note by (from_user_id, to_user_id).
+  Returns nil if no note exists.
+  """
+  @spec get_relationship_note(T.userid(), T.userid()) ::
+          RelationshipNote.t() | nil
+  def get_relationship_note(from_user_id, to_user_id) do
+    Repo.get_by(
+      RelationshipNote,
+      from_user_id: from_user_id,
+      to_user_id: to_user_id
+    )
+  end
+
+  @doc """
+  Upserts a relationship note. If the note text is empty/blank after trimming,
+  deletes any existing note (returns :ok). Otherwise creates or updates the note.
+  """
+  @spec upsert_relationship_note(map()) ::
+          {:ok, RelationshipNote.t()} | :ok | {:error, Ecto.Changeset.t()}
+  def upsert_relationship_note(attrs) do
+    note_text =
+      attrs
+      |> Map.get("note", Map.get(attrs, :note, ""))
+      |> String.trim()
+
+    from_user_id =
+      Map.get(attrs, "from_user_id", Map.get(attrs, :from_user_id))
+
+    to_user_id =
+      Map.get(attrs, "to_user_id", Map.get(attrs, :to_user_id))
+
+    if note_text == "" do
+      # Empty note → delete if it exists
+      case get_relationship_note(from_user_id, to_user_id) do
+        nil -> :ok
+        note -> Repo.delete(note)
+      end
+    else
+      # Non-empty note → insert or update
+      %Teiserver.Account.RelationshipNote{}
+      |> RelationshipNote.changeset(attrs)
+      |> Repo.insert(
+        on_conflict: [set: [note: note_text, updated_at: DateTime.utc_now()]],
+        conflict_target: [:from_user_id, :to_user_id]
+      )
+    end
+  end
+
+  @doc """
+  Lists all relationship notes owned by a user (where they are the from_user).
+  """
+  @spec list_relationship_notes_from_user(T.userid()) :: [RelationshipNote.t()]
+  def list_relationship_notes_from_user(from_user_id) do
+    from(rn in RelationshipNote,
+      where: rn.from_user_id == ^from_user_id,
+      preload: [:to_user]
+    )
+    |> Repo.all()
   end
 
   @spec verb_of_state(String.t() | map) :: String.t()
