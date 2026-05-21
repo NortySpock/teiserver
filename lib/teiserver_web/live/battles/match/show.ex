@@ -30,6 +30,7 @@ defmodule TeiserverWeb.Battle.MatchLive.Show do
       )
       |> assign(:algorithm, BalanceLib.get_default_algorithm())
       |> assign(:give_accolade, nil)
+      |> assign(:contributor?, allow?(socket, "Contributor"))
 
     {:ok, socket}
   end

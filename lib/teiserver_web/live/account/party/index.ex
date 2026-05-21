@@ -11,6 +11,10 @@ defmodule TeiserverWeb.Account.PartyLive.Index do
       socket
       |> AuthPlug.live_call(session)
 
+    socket =
+      socket
+      |> assign(:contributor?, allow?(socket, "Contributor"))
+
     client = Account.get_client_by_id(socket.assigns.current_user.id)
 
     :ok =

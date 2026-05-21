@@ -18,11 +18,9 @@ defmodule TeiserverWeb.Battle.LobbyLive.Index do
 
     moderator = allow?(socket.assigns[:current_user], "Moderator")
 
-    socket =
-      socket
-      |> assign(:moderator, moderator)
-
     disabled? = Config.get_site_config_cache("lobby.Disable lobby live view on website")
+
+    contributor? = allow?(socket.assigns[:current_user], "Contributor")
 
     socket =
       socket
@@ -31,6 +29,8 @@ defmodule TeiserverWeb.Battle.LobbyLive.Index do
       |> assign(:site_menu_active, "lobbies")
       |> assign(:view_colour, Lobby.colours())
       |> assign(:disabled?, disabled?)
+      |> assign(:moderator, moderator)
+      |> assign(:contributor?, contributor?)
 
     {:ok, socket}
   end
