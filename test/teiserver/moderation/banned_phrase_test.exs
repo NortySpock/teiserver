@@ -183,6 +183,24 @@ defmodule Teiserver.Moderation.BannedPhraseTest do
     end
   end
 
+  describe "raw phrase leet character normalization" do
+    test "raw phrase matches message containing leet substitutions" do
+      phrase =
+        banned_phrase_fixture(%{
+          phrase: "some phrase",
+          type: :raw
+        })
+        |> BannedPhrase.load_phrase()
+
+      assert BannedPhrase.phrase_match?(phrase, "some phrase")
+      assert BannedPhrase.phrase_match?(phrase, "SOME PHRASE")
+      assert BannedPhrase.phrase_match?(phrase, "s0me phrase")
+      assert BannedPhrase.phrase_match?(phrase, "some phr4se")
+      assert BannedPhrase.phrase_match?(phrase, "5ome phrase")
+      refute BannedPhrase.phrase_match?(phrase, "some other phrase")
+    end
+  end
+
   describe "load task" do
     test "task loads messages in correct order" do
       banned_phrase_fixture(%{
