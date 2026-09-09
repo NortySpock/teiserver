@@ -14,6 +14,7 @@ defmodule Teiserver.Moderation.BannedPhrase do
   in the future for partial match types.
   """
   alias Ecto.Changeset
+  alias Teiserver.Helper.StringHelper
   alias Teiserver.Moderation
   alias Teiserver.Moderation.BannedPhrase
 
@@ -110,7 +111,7 @@ defmodule Teiserver.Moderation.BannedPhrase do
   end
 
   def load_phrase(%BannedPhrase{phrase: phrase} = banned_phrase) do
-    %BannedPhrase{banned_phrase | loaded_phrase: String.downcase(phrase)}
+    %BannedPhrase{banned_phrase | loaded_phrase: StringHelper.leet_replace(phrase)}
   end
 
   @doc """
@@ -159,7 +160,7 @@ defmodule Teiserver.Moderation.BannedPhrase do
   @spec phrase_match?(BannedPhrase.t(), String.t()) :: boolean()
   def phrase_match?(%BannedPhrase{type: :raw, loaded_phrase: loaded_phrase}, message) do
     message
-    |> String.downcase()
+    |> StringHelper.leet_replace()
     |> String.contains?(loaded_phrase)
   end
 
