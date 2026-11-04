@@ -42,8 +42,8 @@ defmodule Teiserver.ServerCase do
     # all the tests that have side effects, this is a stopgap measure to avoid
     # more false failures.
     TeiserverTestLib.clear_all_con_caches()
-    Tachyon.tachyon_case_setup(tags)
     DataCase.setup_sandbox(tags)
+    Tachyon.tachyon_case_setup(tags)
     Config.update_site_config("system.Use geoip", false)
 
     on_exit(&TeiserverTestLib.clear_all_con_caches/0)
