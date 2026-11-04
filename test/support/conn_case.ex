@@ -45,14 +45,12 @@ defmodule TeiserverWeb.ConnCase do
   end
 
   setup tags do
-    :ok = Sandbox.checkout(Teiserver.Repo)
+    :ok = Teiserver.DataCase.setup_sandbox(tags)
     TeiserverTestLib.clear_all_con_caches()
     Config.update_site_config("system.Use geoip", false)
     on_exit(&TeiserverTestLib.clear_all_con_caches/0)
 
     if !tags[:async] do
-      Sandbox.mode(Teiserver.Repo, {:shared, self()})
-
       :ok =
         Supervisor.terminate_child(Teiserver.Supervisor, Config.SiteConfigTypes.Cache)
 
