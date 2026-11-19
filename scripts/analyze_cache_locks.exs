@@ -214,7 +214,8 @@ defmodule CacheLockAnalyzer do
             call_counts: %{},
             loop_calls: MapSet.new(),
             lock_callbacks: [],
-            tx_callbacks: []
+            tx_callbacks: [],
+            lock_targets: []
           }
 
           acc = walk_forms(clauses, mod, false, acc)
@@ -238,6 +239,7 @@ defmodule CacheLockAnalyzer do
        ) do
     target = {target_mod, target_fun, length(args)}
     acc = record_call(acc, target, in_loop?)
+    acc = maybe_record_lock_target(acc, target, args)
 
     cond do
       MapSet.member?(@lock_callback_callers, target) ->
@@ -291,7 +293,14 @@ defmodule CacheLockAnalyzer do
   defp extract_callback_targets(nil, _mod, acc), do: {[], acc}
 
   defp extract_callback_targets(cb_ast, mod, acc) do
-    sub_acc = %{call_counts: %{}, loop_calls: MapSet.new(), lock_callbacks: [], tx_callbacks: []}
+    sub_acc = %{
+      call_counts: %{},
+      loop_calls: MapSet.new(),
+      lock_callbacks: [],
+      tx_callbacks: [],
+      lock_targets: []
+    }
+
     sub_acc = walk_forms(cb_ast, mod, false, sub_acc)
 
     merged_counts =
@@ -302,11 +311,44 @@ defmodule CacheLockAnalyzer do
       | call_counts: merged_counts,
         loop_calls: MapSet.union(acc.loop_calls, sub_acc.loop_calls),
         lock_callbacks: sub_acc.lock_callbacks ++ acc.lock_callbacks,
-        tx_callbacks: sub_acc.tx_callbacks ++ acc.tx_callbacks
+        tx_callbacks: sub_acc.tx_callbacks ++ acc.tx_callbacks,
+        lock_targets: sub_acc.lock_targets ++ acc.lock_targets
     }
 
     {Map.keys(sub_acc.call_counts), merged}
   end
+
+  defp maybe_record_lock_target(acc, target, args) do
+    if MapSet.member?(@lock_sinks, target) do
+      arg_idx =
+        case target do
+          {Teiserver.Helpers.CacheHelper, fun, _}
+          when fun in [:cache_put_on_ok, :cache_delete_on_ok] ->
+            1
+
+          _ ->
+            0
+        end
+
+      case format_lock_arg(Enum.at(args, arg_idx)) do
+        nil -> acc
+        label -> %{acc | lock_targets: [label | acc.lock_targets]}
+      end
+    else
+      acc
+    end
+  end
+
+  defp format_lock_arg({:atom, _line, atom}), do: inspect(atom)
+
+  defp format_lock_arg({:var, _line, var}) when is_atom(var) do
+    var
+    |> Atom.to_string()
+    |> String.replace(~r/^_/, "")
+    |> String.replace(~r/@\d+$/, "")
+  end
+
+  defp format_lock_arg(_), do: nil
 
   defp record_call(acc, target, in_loop?) do
     counts = Map.update(acc.call_counts, target, 1, &(&1 + 1))
@@ -510,9 +552,20 @@ defmodule CacheLockAnalyzer do
 
         label =
           cond do
-            MapSet.member?(@lock_sinks, mfa) -> "#{format_mfa(mfa)} [LOCK SINK]"
-            locks > 0 -> "#{format_mfa(mfa)} [#{locks} locks]"
-            true -> format_mfa(mfa)
+            MapSet.member?(@lock_sinks, mfa) ->
+              "#{format_mfa(mfa)} [LOCK SINK]"
+
+            locks == 1 ->
+              case find_single_lock_target(mfa, meta_map) do
+                nil -> "#{format_mfa(mfa)} [1 lock]"
+                target -> "#{format_mfa(mfa)} [lock #{target}]"
+              end
+
+            locks > 0 ->
+              "#{format_mfa(mfa)} [#{locks} locks]"
+
+            true ->
+              format_mfa(mfa)
           end
 
         "    #{id}[\"#{label}\"]"
@@ -551,6 +604,39 @@ defmodule CacheLockAnalyzer do
         {sub_e, sub_n} = collect_lock_subgraph(callee, call_graph, meta_map, visited)
         {[{mfa, callee} | sub_e] ++ e_acc, MapSet.put(MapSet.union(n_acc, sub_n), callee)}
       end)
+    end
+  end
+
+  defp find_single_lock_target(mfa, meta_map) do
+    {targets, _visited} = do_collect_lock_targets(mfa, meta_map, MapSet.new())
+
+    case Enum.uniq(targets) do
+      [single] -> single
+      _ -> nil
+    end
+  end
+
+  defp do_collect_lock_targets(mfa, meta_map, visited) do
+    if MapSet.member?(visited, mfa) do
+      {[], visited}
+    else
+      visited = MapSet.put(visited, mfa)
+
+      case Map.get(meta_map, mfa) do
+        nil ->
+          {[], visited}
+
+        info ->
+          Enum.reduce(info.call_counts, {info.lock_targets, visited}, fn {callee, _},
+                                                                        {acc, vis} ->
+            if MapSet.member?(@lock_sinks, callee) do
+              {acc, vis}
+            else
+              {sub, vis2} = do_collect_lock_targets(callee, meta_map, vis)
+              {sub ++ acc, vis2}
+            end
+          end)
+      end
     end
   end
 
